@@ -86,6 +86,9 @@ const GraphState = Annotation.Root({
     }>
   >(),
   retrievedContextSnippets: Annotation<string[]>(),
+  phaseDurationsMs: Annotation<
+    Partial<Record<"observe" | "think" | "plan" | "build" | "execute" | "verify" | "learn", number>>
+  >(),
 });
 
 function shouldIterate(state: GraphRunState): "iterate" | "done" {
@@ -104,14 +107,39 @@ export function createWorkflow(
   config: AppConfig,
   deps: { llmAdapter?: LlmAdapter; toolExecutor?: ToolExecutor; memoryRetriever?: MemoryRetriever } = {},
 ) {
+  const withTiming = <T extends GraphRunState>(
+    phase: "observe" | "think" | "plan" | "build" | "execute" | "verify" | "learn",
+    node: (state: T) => T | Promise<T>,
+  ) => {
+    return async (state: T): Promise<T> => {
+      const started = Date.now();
+      const next = await node(state);
+      const elapsed = Date.now() - started;
+      const durations = next.phaseDurationsMs ?? {};
+      return {
+        ...next,
+        phaseDurationsMs: {
+          ...durations,
+          [phase]: (durations[phase] ?? 0) + elapsed,
+        },
+      };
+    };
+  };
+
   const graph = new StateGraph(GraphState)
-    .addNode("observe", (state) => observeNode(state as GraphRunState))
-    .addNode("think", (state) => thinkNode(state as GraphRunState, deps.llmAdapter, deps.memoryRetriever))
-    .addNode("plan", (state) => planNode(state as GraphRunState, deps.llmAdapter, deps.memoryRetriever))
-    .addNode("build", (state) => buildNode(state as GraphRunState))
-    .addNode("execute", (state) => executeNode(state as GraphRunState, deps.toolExecutor))
-    .addNode("verify", (state) => verifyNode(state as GraphRunState))
-    .addNode("learn", (state) => learnNode(state as GraphRunState))
+    .addNode("observe", (state) => withTiming("observe", observeNode)(state as GraphRunState))
+    .addNode("think", (state) =>
+      withTiming("think", (s) => thinkNode(s, deps.llmAdapter, deps.memoryRetriever))(state as GraphRunState),
+    )
+    .addNode("plan", (state) =>
+      withTiming("plan", (s) => planNode(s, deps.llmAdapter, deps.memoryRetriever))(state as GraphRunState),
+    )
+    .addNode("build", (state) => withTiming("build", buildNode)(state as GraphRunState))
+    .addNode("execute", (state) =>
+      withTiming("execute", (s) => executeNode(s, deps.toolExecutor))(state as GraphRunState),
+    )
+    .addNode("verify", (state) => withTiming("verify", verifyNode)(state as GraphRunState))
+    .addNode("learn", (state) => withTiming("learn", learnNode)(state as GraphRunState))
     .addEdge(START, "observe")
     .addEdge("observe", "think")
     .addEdge("think", "plan")

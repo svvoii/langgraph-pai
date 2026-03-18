@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { GraphRunState } from "../types.js";
+import type { RunReportSummary } from "../runtime/telemetry.js";
 import { serializeWorkDocument, validateWorkDocument } from "./workDocument.js";
 
 export class FsStore {
@@ -13,6 +14,7 @@ export class FsStore {
       mkdir(join(this.dataRoot, "learning"), { recursive: true }),
       mkdir(join(this.dataRoot, "events"), { recursive: true }),
       mkdir(join(this.dataRoot, "transcripts"), { recursive: true }),
+      mkdir(join(this.dataRoot, "reports"), { recursive: true }),
     ]);
   }
 
@@ -77,5 +79,59 @@ export class FsStore {
     } catch {
       return null;
     }
+  }
+
+  async writeRunReport(workId: string, report: unknown): Promise<void> {
+    const path = join(this.dataRoot, "reports", `${workId}.json`);
+    await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, "utf-8");
+  }
+
+  async listRunReportSummaries(limit: number): Promise<RunReportSummary[]> {
+    const reportsDir = join(this.dataRoot, "reports");
+
+    let files: string[];
+    try {
+      files = await readdir(reportsDir, { encoding: "utf-8" });
+    } catch {
+      return [];
+    }
+
+    const records: RunReportSummary[] = [];
+
+    for (const file of files) {
+      if (!file.endsWith(".json")) {
+        continue;
+      }
+
+      const fullPath = join(reportsDir, file);
+      try {
+        const raw = await readFile(fullPath, "utf-8");
+        const parsed = JSON.parse(raw) as {
+          workId?: string;
+          finishedAt?: string;
+          mode?: RunReportSummary["mode"];
+          verificationGates?: { passed?: boolean };
+          iteration?: number;
+          failureCauses?: string[];
+          request?: string;
+        };
+
+        records.push({
+          workId: parsed.workId ?? file.replace(/\.json$/, ""),
+          finishedAt: parsed.finishedAt ?? new Date(0).toISOString(),
+          mode: parsed.mode ?? "algorithm",
+          outcome: parsed.verificationGates?.passed ? "complete" : "blocked",
+          iteration: parsed.iteration ?? 0,
+          failureCauses: parsed.failureCauses ?? [],
+          request: parsed.request ?? "unknown",
+        });
+      } catch {
+        // Ignore malformed reports and continue.
+      }
+    }
+
+    return records
+      .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+      .slice(0, Math.max(limit, 0));
   }
 }

@@ -86,6 +86,7 @@ export interface GraphRunState {
   plannedToolIntents: ToolIntent[];
   toolResults: ToolExecutionResult[];
   retrievedContextSnippets: string[];
+  phaseDurationsMs: Partial<Record<Phase, number>>;
   verificationSummary: {
     passed: number;
     failed: number;

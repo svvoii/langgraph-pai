@@ -12,6 +12,7 @@ import { synthesizeLearningForWork } from "./memory/synthesizer.js";
 import { loadConfig } from "./runtime/config.js";
 import { createToolExecutor } from "./runtime/executor.js";
 import { assertSkillToolPolicy } from "./runtime/policies.js";
+import { buildRunReport, formatRecentRunSummaries, summarizeRunReport } from "./runtime/telemetry.js";
 import {
   formatLoadedSkillsV1,
   loadSkillsV1,
@@ -51,6 +52,7 @@ function createInitialState(request: string): GraphRunState {
     plannedToolIntents: [],
     toolResults: [],
     retrievedContextSnippets: [],
+    phaseDurationsMs: {},
     verificationSummary: {
       passed: 0,
       failed: 0,
@@ -131,6 +133,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args[0] === "runs:recent") {
+    const count = args[1] ? Number(args[1]) : 5;
+    const summaries = await store.listRunReportSummaries(Number.isFinite(count) ? count : 5);
+    process.stdout.write(`${formatRecentRunSummaries(summaries)}\n`);
+    return;
+  }
+
   if (args[0] === "resume") {
     const workId = args[1];
 
@@ -167,6 +176,7 @@ async function runSession(
   config: ReturnType<typeof loadConfig>,
   store: FsStore,
 ): Promise<GraphRunState> {
+  const startedAtMs = Date.now();
   const normalizedState = withRuntimeDefaults(state);
   const sessionId = randomUUID();
 
@@ -224,6 +234,7 @@ async function runSession(
     memoryRetriever: createMemoryRetriever(config.dataRoot),
   });
   const result = await workflow.run(activeState);
+  const finishedAtMs = Date.now();
 
   await hookBus.emit(
     "PostToolUse",
@@ -239,9 +250,17 @@ async function runSession(
 
   await store.writeState(result);
   await store.writeWorkDoc(result);
+  const runReport = buildRunReport({
+    request,
+    state: result,
+    startedAtMs,
+    finishedAtMs,
+  });
+  await store.writeRunReport(result.workId, runReport);
   await store.appendTranscript(result.workId, "user", request);
 
   const summary = `Completed in mode=${result.mode} iteration=${result.iteration} pass=${result.verificationSummary.passed}`;
+  const runSummary = summarizeRunReport(runReport);
   await store.appendTranscript(result.workId, "assistant", summary);
 
   await hookBus.emit("Stop", { summary }, { ...context, phase: result.currentPhase });
@@ -252,6 +271,9 @@ async function runSession(
   );
 
   process.stdout.write(`${summary}\n`);
+  process.stdout.write(
+    `Run summary: outcome=${runSummary.outcome} failures=${runSummary.failureCauses.join(";") || "none"}\n`,
+  );
   process.stdout.write(`Work ID: ${result.workId}\n`);
   process.stdout.write(`Work doc: ${config.dataRoot}/work/${result.workId}.md\n`);
 
@@ -313,6 +335,7 @@ function withRuntimeDefaults(state: GraphRunState): GraphRunState {
     plannedToolIntents: state.plannedToolIntents ?? [],
     toolResults: state.toolResults ?? [],
     retrievedContextSnippets: state.retrievedContextSnippets ?? [],
+    phaseDurationsMs: state.phaseDurationsMs ?? {},
     verificationGates: state.verificationGates ?? {
       noFailedCriteria: false,
       noBlockedPolicyEvents: true,
