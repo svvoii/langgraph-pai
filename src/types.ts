@@ -21,6 +21,42 @@ export interface Criterion {
 export interface ToolEvent {
   toolName: string;
   input: string;
+  skillId?: string;
+  targetPath?: string;
+  toolCallCount?: number;
+}
+
+export interface SkillPermissions {
+  network: boolean;
+  fileSystem: boolean;
+  shell: boolean;
+  allowedPaths: string[];
+  blockedCommands: string[];
+  maxToolCalls: number;
+}
+
+export interface SkillRuntimePolicy {
+  skillId: string;
+  requiredTools: string[];
+  permissions: SkillPermissions;
+}
+
+export interface ToolIntent {
+  id: string;
+  skillId: string;
+  toolName: string;
+  input: string;
+  targetPath?: string;
+  command?: string;
+}
+
+export interface ToolExecutionResult {
+  intentId: string;
+  skillId: string;
+  toolName: string;
+  status: "ok" | "error" | "blocked";
+  output: string;
+  timestamp: string;
 }
 
 export interface GraphRunState {
@@ -35,6 +71,9 @@ export interface GraphRunState {
   stopReason: string | null;
   decisionLog: string[];
   eventLog: string[];
+  activeSkillPolicies: SkillRuntimePolicy[];
+  plannedToolIntents: ToolIntent[];
+  toolResults: ToolExecutionResult[];
   verificationSummary: {
     passed: number;
     failed: number;

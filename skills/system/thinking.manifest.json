@@ -1,11 +1,34 @@
 {
+  "id": "thinking",
   "name": "Thinking",
+  "version": "1.0.0",
   "description": "Structured decomposition and deep analysis",
-  "useWhen": ["analyze", "decompose", "plan", "think"],
+  "enabled": true,
+  "useWhen": [
+    "analyze",
+    "decompose",
+    "plan",
+    "think"
+  ],
+  "requiredTools": [
+    "reasoning"
+  ],
   "permissions": {
-    "tools": ["reasoning"],
     "network": false,
-    "fileSystem": false
+    "fileSystem": false,
+    "shell": false,
+    "allowedPaths": [],
+    "blockedCommands": [],
+    "maxToolCalls": 10
   },
-  "enabled": true
+  "entrypoints": {},
+  "dependencies": [],
+  "compatibility": {
+    "assistantCore": ">=0.1.0 <1.0.0"
+  },
+  "overrideOf": null,
+  "tags": [
+    "analysis",
+    "reasoning"
+  ]
 }

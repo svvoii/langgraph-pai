@@ -1,11 +1,34 @@
 {
+  "id": "research",
   "name": "Research",
+  "version": "1.0.0",
   "description": "Gather and synthesize external information",
-  "useWhen": ["research", "find", "summarize"],
+  "enabled": true,
+  "useWhen": [
+    "research",
+    "find",
+    "summarize"
+  ],
+  "requiredTools": [
+    "web.fetch",
+    "reasoning"
+  ],
   "permissions": {
-    "tools": ["web-search"],
     "network": true,
-    "fileSystem": false
+    "fileSystem": false,
+    "shell": false,
+    "allowedPaths": [],
+    "blockedCommands": [],
+    "maxToolCalls": 10
   },
-  "enabled": true
+  "entrypoints": {},
+  "dependencies": [],
+  "compatibility": {
+    "assistantCore": ">=0.1.0 <1.0.0"
+  },
+  "overrideOf": null,
+  "tags": [
+    "research",
+    "web"
+  ]
 }

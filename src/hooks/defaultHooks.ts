@@ -1,17 +1,6 @@
 import type { FsStore } from "../memory/fsStore.js";
-import type { HookContext, ToolEvent } from "../types.js";
+import type { HookContext } from "../types.js";
 import { HookBus } from "./hookBus.js";
-
-const BLOCKED_COMMANDS = ["rm -rf /", "git reset --hard", "curl | sh"];
-
-function assertToolAllowed(toolEvent: ToolEvent): void {
-  const input = toolEvent.input.toLowerCase();
-  const blocked = BLOCKED_COMMANDS.some((pattern) => input.includes(pattern));
-
-  if (blocked) {
-    throw new Error(`Tool input blocked by policy: ${toolEvent.input}`);
-  }
-}
 
 async function writeEvent(
   store: FsStore,
@@ -31,8 +20,8 @@ export function registerDefaultHooks(bus: HookBus, store: FsStore): void {
   });
 
   bus.on("PreToolUse", async ({ toolEvent }, context) => {
-    assertToolAllowed(toolEvent);
-    await writeEvent(store, context, `pre_tool tool=${toolEvent.toolName}`);
+    const suffix = toolEvent.skillId ? ` skill=${toolEvent.skillId}` : "";
+    await writeEvent(store, context, `pre_tool tool=${toolEvent.toolName}${suffix}`);
   });
 
   bus.on("PostToolUse", async ({ toolEvent, result }, context) => {

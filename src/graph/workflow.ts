@@ -1,5 +1,7 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { AppConfig } from "../runtime/config.js";
+import type { LlmAdapter } from "../llm.js";
+import type { ToolExecutor } from "../runtime/executor.js";
 import type { GraphRunState } from "../types.js";
 import {
   buildNode,
@@ -28,6 +30,40 @@ const GraphState = Annotation.Root({
   decisionLog: Annotation<string[]>(),
   eventLog: Annotation<string[]>(),
   verificationSummary: Annotation<{ passed: number; failed: number; pending: number }>(),
+  activeSkillPolicies: Annotation<
+    Array<{
+      skillId: string;
+      requiredTools: string[];
+      permissions: {
+        network: boolean;
+        fileSystem: boolean;
+        shell: boolean;
+        allowedPaths: string[];
+        blockedCommands: string[];
+        maxToolCalls: number;
+      };
+    }>
+  >(),
+  plannedToolIntents: Annotation<
+    Array<{
+      id: string;
+      skillId: string;
+      toolName: string;
+      input: string;
+      targetPath?: string;
+      command?: string;
+    }>
+  >(),
+  toolResults: Annotation<
+    Array<{
+      intentId: string;
+      skillId: string;
+      toolName: string;
+      status: "ok" | "error" | "blocked";
+      output: string;
+      timestamp: string;
+    }>
+  >(),
 });
 
 function shouldIterate(state: GraphRunState): "iterate" | "done" {
@@ -42,13 +78,16 @@ function shouldIterate(state: GraphRunState): "iterate" | "done" {
   return "iterate";
 }
 
-export function createWorkflow(config: AppConfig) {
+export function createWorkflow(
+  config: AppConfig,
+  deps: { llmAdapter?: LlmAdapter; toolExecutor?: ToolExecutor } = {},
+) {
   const graph = new StateGraph(GraphState)
     .addNode("observe", (state) => observeNode(state as GraphRunState))
-    .addNode("think", (state) => thinkNode(state as GraphRunState))
-    .addNode("plan", (state) => planNode(state as GraphRunState))
+    .addNode("think", (state) => thinkNode(state as GraphRunState, deps.llmAdapter))
+    .addNode("plan", (state) => planNode(state as GraphRunState, deps.llmAdapter))
     .addNode("build", (state) => buildNode(state as GraphRunState))
-    .addNode("execute", (state) => executeNode(state as GraphRunState))
+    .addNode("execute", (state) => executeNode(state as GraphRunState, deps.toolExecutor))
     .addNode("verify", (state) => verifyNode(state as GraphRunState))
     .addNode("learn", (state) => learnNode(state as GraphRunState))
     .addEdge(START, "observe")

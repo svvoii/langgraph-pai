@@ -1,14 +1,13 @@
 {
-  "id": "utilities",
-  "name": "Utilities",
+  "id": "code-refactor",
+  "name": "Code Refactor",
   "version": "1.0.0",
-  "description": "Execution helpers and tooling",
+  "description": "Refactor code safely with tests and style checks",
   "enabled": true,
   "useWhen": [
-    "implement",
-    "build",
-    "generate",
-    "create"
+    "refactor",
+    "cleanup",
+    "improve code structure"
   ],
   "requiredTools": [
     "file.read",
@@ -21,23 +20,26 @@
     "shell": true,
     "allowedPaths": [
       "src/**",
-      "skills/**",
-      "README.md"
+      "tests/**"
     ],
     "blockedCommands": [
       "rm -rf /",
       "git reset --hard"
     ],
-    "maxToolCalls": 15
+    "maxToolCalls": 20
   },
-  "entrypoints": {},
+  "entrypoints": {
+    "plannerPrompt": "prompts/planner.txt",
+    "executorPrompt": "prompts/executor.txt",
+    "workflowModule": "workflow.ts"
+  },
   "dependencies": [],
   "compatibility": {
     "assistantCore": ">=0.1.0 <1.0.0"
   },
   "overrideOf": null,
   "tags": [
-    "execution",
-    "tooling"
+    "code",
+    "refactor"
   ]
 }

@@ -1,4 +1,6 @@
 import type { GraphRunState } from "../types.js";
+import type { LlmAdapter } from "../llm.js";
+import type { ToolExecutor } from "../runtime/executor.js";
 
 function markDecision(state: GraphRunState, decision: string): GraphRunState {
   return {
@@ -35,44 +37,89 @@ export function observeNode(state: GraphRunState): GraphRunState {
   );
 }
 
-export function thinkNode(state: GraphRunState): GraphRunState {
+export async function thinkNode(
+  state: GraphRunState,
+  llmAdapter?: LlmAdapter,
+): Promise<GraphRunState> {
+  const fallbackDecision = "Assessed risks and clarified assumptions";
+  const llmDecision = await safeLlmDecision(state, "think", llmAdapter, fallbackDecision);
+
   return markDecision(
     {
       ...state,
       currentPhase: "think",
     },
-    "Assessed risks and clarified assumptions",
+    llmDecision,
   );
 }
 
-export function planNode(state: GraphRunState): GraphRunState {
+export async function planNode(
+  state: GraphRunState,
+  llmAdapter?: LlmAdapter,
+): Promise<GraphRunState> {
+  const fallbackDecision = "Created phased implementation strategy";
+  const llmDecision = await safeLlmDecision(state, "plan", llmAdapter, fallbackDecision);
+
   return markDecision(
     {
       ...state,
       currentPhase: "plan",
     },
-    "Created phased implementation strategy",
+    llmDecision,
   );
 }
 
 export function buildNode(state: GraphRunState): GraphRunState {
+  const intents = state.activeSkillPolicies.flatMap((policy) =>
+    policy.requiredTools.map((toolName, index) => ({
+      id: `${policy.skillId}-${state.iteration + 1}-${index + 1}`,
+      skillId: policy.skillId,
+      toolName,
+      input: state.request,
+      targetPath: extractPathFromRequest(state.request),
+      command: chooseCommandForRequest(toolName, state.request),
+    })),
+  );
+
   return markDecision(
     {
       ...state,
       currentPhase: "build",
       iteration: state.iteration + 1,
+      plannedToolIntents: intents,
     },
-    "Built and integrated core runtime modules",
+    `Built runtime plan with ${intents.length} tool intent(s)`,
   );
 }
 
-export function executeNode(state: GraphRunState): GraphRunState {
+export async function executeNode(
+  state: GraphRunState,
+  toolExecutor?: ToolExecutor,
+): Promise<GraphRunState> {
+  if (!toolExecutor || state.plannedToolIntents.length === 0) {
+    return markDecision(
+      {
+        ...state,
+        currentPhase: "execute",
+      },
+      "Execute skipped tool runtime (no executor or no intents)",
+    );
+  }
+
+  const results = await toolExecutor.executeIntents(state);
+
+  const summary =
+    results.length === 0
+      ? "Executed 0 tool intents"
+      : `Executed ${results.length} tool intents: ${results.map((r) => `${r.toolName}:${r.status}`).join(", ")}`;
+
   return markDecision(
     {
       ...state,
       currentPhase: "execute",
+      toolResults: [...state.toolResults, ...results],
     },
-    "Executed the planned runtime flow",
+    summary,
   );
 }
 
@@ -113,4 +160,52 @@ export function learnNode(state: GraphRunState): GraphRunState {
       ? "Recorded successful reflection and completion learning"
       : "Recorded partial progress reflection for next iteration",
   );
+}
+
+async function safeLlmDecision(
+  state: GraphRunState,
+  phase: "think" | "plan",
+  llmAdapter: LlmAdapter | undefined,
+  fallbackDecision: string,
+): Promise<string> {
+  if (!llmAdapter || state.mode === "minimal") {
+    return fallbackDecision;
+  }
+
+  try {
+    const generated = await llmAdapter.completePhase({
+      phase,
+      request: state.request,
+      mode: state.mode,
+      iteration: state.iteration,
+      criteria: state.criteria,
+    });
+
+    return generated || fallbackDecision;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return `${fallbackDecision} (LLM fallback: ${message})`;
+  }
+}
+
+function extractPathFromRequest(request: string): string | undefined {
+  const match = request.match(/([A-Za-z0-9_./-]+\.[A-Za-z0-9_-]+)/);
+  return match ? match[1] : undefined;
+}
+
+function chooseCommandForRequest(toolName: string, request: string): string | undefined {
+  if (toolName !== "shell.run") {
+    return undefined;
+  }
+
+  const lowered = request.toLowerCase();
+  if (lowered.includes("check") || lowered.includes("compile") || lowered.includes("type")) {
+    return "npm run check";
+  }
+
+  if (lowered.includes("list") || lowered.includes("files")) {
+    return "ls";
+  }
+
+  return "echo no-op";
 }
