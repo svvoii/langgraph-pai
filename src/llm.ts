@@ -8,6 +8,7 @@ export interface LlmPhaseInput {
     mode: Mode;
     iteration: number;
     criteria: Criterion[];
+    contextSnippets: string[];
 }
 
 export interface LlmAdapter {
@@ -41,6 +42,10 @@ class OpenAiLlmAdapter implements LlmAdapter {
             `Iteration: ${input.iteration}`,
             "Criteria:",
             criteriaText || "- none",
+            "Retrieved context:",
+            input.contextSnippets.length > 0
+                ? input.contextSnippets.map((snippet) => `- ${snippet}`).join("\n")
+                : "- none",
             "Respond with plain text only.",
         ].join("\n");
 

@@ -51,12 +51,20 @@ export function serializeWorkDocument(state: GraphRunState): string {
     "# Ideal State Criteria",
     ...state.criteria.map((c) => {
       const check = c.status === "pass" ? "x" : " ";
-      const evidence = c.evidence ? ` (evidence: ${c.evidence})` : "";
-      return `- [${check}] ${c.id}: ${c.text}${evidence}`;
+      const target = c.target ? ` target=${c.target}` : "";
+      const evidence = c.evidence
+        ? ` (evidence: ${c.evidence.summary}; details: ${c.evidence.details}; at: ${c.evidence.timestamp})`
+        : "";
+      return `- [${check}] ${c.id}: ${c.text} [${c.checkType}${target}]${evidence}`;
     }),
     "",
     "# Decisions",
     ...state.decisionLog.map((entry) => `- ${entry}`),
+    "",
+    "# Retrieved Context",
+    ...(state.retrievedContextSnippets.length > 0
+      ? state.retrievedContextSnippets.map((snippet) => `- ${snippet}`)
+      : ["- none"]),
     "",
     "# Changelog",
     ...changelog.map((entry) => `- ${entry}`),
@@ -65,6 +73,11 @@ export function serializeWorkDocument(state: GraphRunState): string {
     `- Passed: ${state.verificationSummary.passed}`,
     `- Failed: ${state.verificationSummary.failed}`,
     `- Pending: ${state.verificationSummary.pending}`,
+    `- Gates Passed: ${state.verificationGates.passed}`,
+    `- Gate noFailedCriteria: ${state.verificationGates.noFailedCriteria}`,
+    `- Gate noBlockedPolicyEvents: ${state.verificationGates.noBlockedPolicyEvents}`,
+    `- Gate noUnresolvedHighRiskAssumptions: ${state.verificationGates.noUnresolvedHighRiskAssumptions}`,
+    `- Gate failedReasons: ${state.verificationGates.failedReasons.join("; ") || "none"}`,
   ].join("\n");
 }
 

@@ -1,6 +1,8 @@
 import type { GraphRunState } from "../types.js";
 import type { LlmAdapter } from "../llm.js";
+import type { MemoryRetriever } from "../memory/retriever.js";
 import type { ToolExecutor } from "../runtime/executor.js";
+import { evaluateCriterion } from "../verification/checker.js";
 
 function markDecision(state: GraphRunState, decision: string): GraphRunState {
   return {
@@ -22,9 +24,27 @@ export function observeNode(state: GraphRunState): GraphRunState {
   }
 
   const criteria = [
-    { id: "ISC-1", text: "Graph compiles and runs", status: "pending" as const },
-    { id: "ISC-2", text: "Hook lifecycle emits events", status: "pending" as const },
-    { id: "ISC-3", text: "State persisted to disk", status: "pending" as const },
+    {
+      id: "ISC-1",
+      text: "Graph compiles and runs",
+      checkType: "command" as const,
+      target: "npm run check",
+      status: "pending" as const,
+    },
+    {
+      id: "ISC-2",
+      text: "Hook lifecycle emits events",
+      checkType: "semantic" as const,
+      target: "hook-event-signal",
+      status: "pending" as const,
+    },
+    {
+      id: "ISC-3",
+      text: "State persisted to disk",
+      checkType: "file" as const,
+      target: ".data",
+      status: "pending" as const,
+    },
   ];
 
   return markDecision(
@@ -40,14 +60,23 @@ export function observeNode(state: GraphRunState): GraphRunState {
 export async function thinkNode(
   state: GraphRunState,
   llmAdapter?: LlmAdapter,
+  memoryRetriever?: MemoryRetriever,
 ): Promise<GraphRunState> {
   const fallbackDecision = "Assessed risks and clarified assumptions";
-  const llmDecision = await safeLlmDecision(state, "think", llmAdapter, fallbackDecision);
+  const contextSnippets = await retrieveContextSnippets(state, memoryRetriever);
+  const llmDecision = await safeLlmDecision(
+    state,
+    "think",
+    llmAdapter,
+    contextSnippets,
+    fallbackDecision,
+  );
 
   return markDecision(
     {
       ...state,
       currentPhase: "think",
+      retrievedContextSnippets: contextSnippets,
     },
     llmDecision,
   );
@@ -56,14 +85,23 @@ export async function thinkNode(
 export async function planNode(
   state: GraphRunState,
   llmAdapter?: LlmAdapter,
+  memoryRetriever?: MemoryRetriever,
 ): Promise<GraphRunState> {
   const fallbackDecision = "Created phased implementation strategy";
-  const llmDecision = await safeLlmDecision(state, "plan", llmAdapter, fallbackDecision);
+  const contextSnippets = await retrieveContextSnippets(state, memoryRetriever);
+  const llmDecision = await safeLlmDecision(
+    state,
+    "plan",
+    llmAdapter,
+    contextSnippets,
+    fallbackDecision,
+  );
 
   return markDecision(
     {
       ...state,
       currentPhase: "plan",
+      retrievedContextSnippets: contextSnippets,
     },
     llmDecision,
   );
@@ -123,12 +161,17 @@ export async function executeNode(
   );
 }
 
-export function verifyNode(state: GraphRunState): GraphRunState {
-  const updatedCriteria = state.criteria.map((criterion, index) => ({
-    ...criterion,
-    status: index < 2 ? "pass" : criterion.status,
-    evidence: index < 2 ? "MVP integration check passed" : criterion.evidence,
-  }));
+export async function verifyNode(state: GraphRunState): Promise<GraphRunState> {
+  const updatedCriteria = await Promise.all(
+    state.criteria.map(async (criterion) => {
+      const result = await evaluateCriterion(criterion, state);
+      return {
+        ...criterion,
+        status: result.status,
+        evidence: result.evidence,
+      };
+    }),
+  );
 
   const passed = updatedCriteria.filter((c) => c.status === "pass").length;
   const failed = updatedCriteria.filter((c) => c.status === "fail").length;
@@ -146,19 +189,44 @@ export function verifyNode(state: GraphRunState): GraphRunState {
 }
 
 export function learnNode(state: GraphRunState): GraphRunState {
-  const allPassed = state.criteria.every((criterion) => criterion.status === "pass");
-  const plateauCount = allPassed ? state.plateauCount : state.plateauCount + 1;
+  const noFailedCriteria =
+    state.verificationSummary.failed === 0 && state.verificationSummary.pending === 0;
+  const noBlockedPolicyEvents = !state.toolResults.some((result) => result.status === "blocked");
+  const noUnresolvedHighRiskAssumptions =
+    !state.decisionLog.some((entry) => /high-risk assumption unresolved/i.test(entry));
+
+  const failedReasons: string[] = [];
+  if (!noFailedCriteria) {
+    failedReasons.push("criteria checks not fully passing");
+  }
+  if (!noBlockedPolicyEvents) {
+    failedReasons.push("blocked policy events detected");
+  }
+  if (!noUnresolvedHighRiskAssumptions) {
+    failedReasons.push("unresolved high-risk assumptions detected");
+  }
+
+  const gatesPassed =
+    noFailedCriteria && noBlockedPolicyEvents && noUnresolvedHighRiskAssumptions;
+  const plateauCount = gatesPassed ? state.plateauCount : state.plateauCount + 1;
 
   return markDecision(
     {
       ...state,
       currentPhase: "learn",
       plateauCount,
-      stopReason: allPassed ? "criteria_satisfied" : null,
+      stopReason: gatesPassed ? "criteria_satisfied" : null,
+      verificationGates: {
+        noFailedCriteria,
+        noBlockedPolicyEvents,
+        noUnresolvedHighRiskAssumptions,
+        passed: gatesPassed,
+        failedReasons,
+      },
     },
-    allPassed
+    gatesPassed
       ? "Recorded successful reflection and completion learning"
-      : "Recorded partial progress reflection for next iteration",
+      : `Recorded partial progress reflection for next iteration (gates failed: ${failedReasons.join(", ")})`,
   );
 }
 
@@ -166,6 +234,7 @@ async function safeLlmDecision(
   state: GraphRunState,
   phase: "think" | "plan",
   llmAdapter: LlmAdapter | undefined,
+  contextSnippets: string[],
   fallbackDecision: string,
 ): Promise<string> {
   if (!llmAdapter || state.mode === "minimal") {
@@ -179,12 +248,32 @@ async function safeLlmDecision(
       mode: state.mode,
       iteration: state.iteration,
       criteria: state.criteria,
+      contextSnippets,
     });
 
     return generated || fallbackDecision;
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return `${fallbackDecision} (LLM fallback: ${message})`;
+  }
+}
+
+async function retrieveContextSnippets(
+  state: GraphRunState,
+  memoryRetriever: MemoryRetriever | undefined,
+): Promise<string[]> {
+  if (!memoryRetriever) {
+    return state.retrievedContextSnippets;
+  }
+
+  try {
+    return await memoryRetriever.retrieve({
+      request: state.request,
+      currentWorkId: state.workId,
+      topK: 3,
+    });
+  } catch {
+    return state.retrievedContextSnippets;
   }
 }
 

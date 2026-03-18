@@ -6,6 +6,7 @@ import { createWorkflow } from "./graph/workflow.js";
 import { HookBus } from "./hooks/hookBus.js";
 import { registerDefaultHooks } from "./hooks/defaultHooks.js";
 import { createLlmAdapter } from "./llm.js";
+import { createMemoryRetriever } from "./memory/retriever.js";
 import { FsStore } from "./memory/fsStore.js";
 import { synthesizeLearningForWork } from "./memory/synthesizer.js";
 import { loadConfig } from "./runtime/config.js";
@@ -49,10 +50,18 @@ function createInitialState(request: string): GraphRunState {
     activeSkillPolicies: [],
     plannedToolIntents: [],
     toolResults: [],
+    retrievedContextSnippets: [],
     verificationSummary: {
       passed: 0,
       failed: 0,
       pending: 0,
+    },
+    verificationGates: {
+      noFailedCriteria: false,
+      noBlockedPolicyEvents: true,
+      noUnresolvedHighRiskAssumptions: true,
+      passed: false,
+      failedReasons: [],
     },
   };
 }
@@ -212,6 +221,7 @@ async function runSession(
   const workflow = createWorkflow(config, {
     llmAdapter: createLlmAdapter(),
     toolExecutor,
+    memoryRetriever: createMemoryRetriever(config.dataRoot),
   });
   const result = await workflow.run(activeState);
 
@@ -302,6 +312,14 @@ function withRuntimeDefaults(state: GraphRunState): GraphRunState {
     activeSkillPolicies: state.activeSkillPolicies ?? [],
     plannedToolIntents: state.plannedToolIntents ?? [],
     toolResults: state.toolResults ?? [],
+    retrievedContextSnippets: state.retrievedContextSnippets ?? [],
+    verificationGates: state.verificationGates ?? {
+      noFailedCriteria: false,
+      noBlockedPolicyEvents: true,
+      noUnresolvedHighRiskAssumptions: true,
+      passed: false,
+      failedReasons: [],
+    },
   };
 }
 

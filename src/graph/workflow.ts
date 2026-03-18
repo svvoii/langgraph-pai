@@ -1,6 +1,7 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { AppConfig } from "../runtime/config.js";
 import type { LlmAdapter } from "../llm.js";
+import type { MemoryRetriever } from "../memory/retriever.js";
 import type { ToolExecutor } from "../runtime/executor.js";
 import type { GraphRunState } from "../types.js";
 import {
@@ -21,7 +22,20 @@ const GraphState = Annotation.Root({
     "observe" | "think" | "plan" | "build" | "execute" | "verify" | "learn" | null
   >(),
   criteria: Annotation<
-    Array<{ id: string; text: string; status: "pending" | "pass" | "fail"; evidence?: string }>
+    Array<{
+      id: string;
+      text: string;
+      checkType: "file" | "command" | "test" | "semantic";
+      target?: string;
+      status: "pending" | "pass" | "fail";
+      evidence?: {
+        checkType: "file" | "command" | "test" | "semantic";
+        passed: boolean;
+        summary: string;
+        details: string;
+        timestamp: string;
+      };
+    }>
   >(),
   maxIterations: Annotation<number>(),
   iteration: Annotation<number>(),
@@ -30,6 +44,13 @@ const GraphState = Annotation.Root({
   decisionLog: Annotation<string[]>(),
   eventLog: Annotation<string[]>(),
   verificationSummary: Annotation<{ passed: number; failed: number; pending: number }>(),
+  verificationGates: Annotation<{
+    noFailedCriteria: boolean;
+    noBlockedPolicyEvents: boolean;
+    noUnresolvedHighRiskAssumptions: boolean;
+    passed: boolean;
+    failedReasons: string[];
+  }>(),
   activeSkillPolicies: Annotation<
     Array<{
       skillId: string;
@@ -64,6 +85,7 @@ const GraphState = Annotation.Root({
       timestamp: string;
     }>
   >(),
+  retrievedContextSnippets: Annotation<string[]>(),
 });
 
 function shouldIterate(state: GraphRunState): "iterate" | "done" {
@@ -80,12 +102,12 @@ function shouldIterate(state: GraphRunState): "iterate" | "done" {
 
 export function createWorkflow(
   config: AppConfig,
-  deps: { llmAdapter?: LlmAdapter; toolExecutor?: ToolExecutor } = {},
+  deps: { llmAdapter?: LlmAdapter; toolExecutor?: ToolExecutor; memoryRetriever?: MemoryRetriever } = {},
 ) {
   const graph = new StateGraph(GraphState)
     .addNode("observe", (state) => observeNode(state as GraphRunState))
-    .addNode("think", (state) => thinkNode(state as GraphRunState, deps.llmAdapter))
-    .addNode("plan", (state) => planNode(state as GraphRunState, deps.llmAdapter))
+    .addNode("think", (state) => thinkNode(state as GraphRunState, deps.llmAdapter, deps.memoryRetriever))
+    .addNode("plan", (state) => planNode(state as GraphRunState, deps.llmAdapter, deps.memoryRetriever))
     .addNode("build", (state) => buildNode(state as GraphRunState))
     .addNode("execute", (state) => executeNode(state as GraphRunState, deps.toolExecutor))
     .addNode("verify", (state) => verifyNode(state as GraphRunState))

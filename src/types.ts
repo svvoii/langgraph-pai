@@ -10,12 +10,23 @@ export type Phase =
   | "learn";
 
 export type CriterionStatus = "pending" | "pass" | "fail";
+export type CriterionCheckType = "file" | "command" | "test" | "semantic";
+
+export interface VerificationEvidence {
+  checkType: CriterionCheckType;
+  passed: boolean;
+  summary: string;
+  details: string;
+  timestamp: string;
+}
 
 export interface Criterion {
   id: string;
   text: string;
+  checkType: CriterionCheckType;
+  target?: string;
   status: CriterionStatus;
-  evidence?: string;
+  evidence?: VerificationEvidence;
 }
 
 export interface ToolEvent {
@@ -74,10 +85,18 @@ export interface GraphRunState {
   activeSkillPolicies: SkillRuntimePolicy[];
   plannedToolIntents: ToolIntent[];
   toolResults: ToolExecutionResult[];
+  retrievedContextSnippets: string[];
   verificationSummary: {
     passed: number;
     failed: number;
     pending: number;
+  };
+  verificationGates: {
+    noFailedCriteria: boolean;
+    noBlockedPolicyEvents: boolean;
+    noUnresolvedHighRiskAssumptions: boolean;
+    passed: boolean;
+    failedReasons: string[];
   };
 }
 
