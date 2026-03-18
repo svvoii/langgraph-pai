@@ -1,0 +1,11 @@
+{
+  "name": "Research",
+  "description": "Gather and synthesize external information",
+  "useWhen": ["research", "find", "summarize"],
+  "permissions": {
+    "tools": ["web-search"],
+    "network": true,
+    "fileSystem": false
+  },
+  "enabled": true
+}

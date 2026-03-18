@@ -1,0 +1,11 @@
+{
+  "name": "Utilities",
+  "description": "Execution helpers and tooling",
+  "useWhen": ["implement", "build", "generate", "create"],
+  "permissions": {
+    "tools": ["shell", "editor"],
+    "network": false,
+    "fileSystem": true
+  },
+  "enabled": true
+}

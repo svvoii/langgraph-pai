@@ -1,0 +1,11 @@
+{
+  "name": "Thinking",
+  "description": "Structured decomposition and deep analysis",
+  "useWhen": ["analyze", "decompose", "plan", "think"],
+  "permissions": {
+    "tools": ["reasoning"],
+    "network": false,
+    "fileSystem": false
+  },
+  "enabled": true
+}
