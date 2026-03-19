@@ -1,0 +1,45 @@
+{
+  "id": "content-analysis",
+  "name": "Content Analysis",
+  "version": "1.0.0",
+  "description": "Content extraction and analysis workflows for videos, podcasts, articles, and transcripts",
+  "enabled": true,
+  "useWhen": [
+    "extract wisdom",
+    "content analysis",
+    "analyze content",
+    "insight report",
+    "analyze video",
+    "analyze podcast",
+    "extract insights",
+    "key takeaways",
+    "what did i miss",
+    "extract from youtube"
+  ],
+  "requiredTools": [
+    "reasoning"
+  ],
+  "permissions": {
+    "network": false,
+    "fileSystem": false,
+    "shell": false,
+    "allowedPaths": [],
+    "blockedCommands": [],
+    "maxToolCalls": 10
+  },
+  "entrypoints": {
+    "plannerPrompt": "content-analysis/ExtractWisdom/SKILL.md",
+    "executorPrompt": "content-analysis/ExtractWisdom/Workflows/Extract.md"
+  },
+  "dependencies": [],
+  "compatibility": {
+    "assistantCore": ">=0.1.0 <1.0.0"
+  },
+  "overrideOf": null,
+  "tags": [
+    "analysis",
+    "content",
+    "extraction",
+    "wisdom"
+  ]
+}

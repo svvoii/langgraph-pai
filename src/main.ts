@@ -18,6 +18,7 @@ import {
   loadSkillsV1,
   scaffoldManifestV1,
 } from "./skills/manifest.v1.loader.js";
+import { loadSkillDocContexts } from "./skills/docContext.loader.js";
 import {
   summarizeValidationIssues,
   validateLoadedSkillsV1Policy,
@@ -49,6 +50,7 @@ function createInitialState(request: string): GraphRunState {
     decisionLog: [],
     eventLog: [],
     activeSkillPolicies: [],
+    selectedSkillContexts: [],
     plannedToolIntents: [],
     toolResults: [],
     retrievedContextSnippets: [],
@@ -200,9 +202,15 @@ async function runSession(
 
   const selectedSkills = routeSkillsV1(skills, request);
   const activeSkillPolicies = selectedSkills.map((skill) => toSkillRuntimePolicy(skill));
+  const selectedSkillContexts = await loadSkillDocContexts(selectedSkills, {
+    enabled: config.skillDocContextEnabled,
+    maxBytesPerSkill: config.skillDocMaxBytesPerSkill,
+    includeSupplementalDocs: config.skillDocIncludeSupplementalDocs,
+  });
   const activeState: GraphRunState = {
     ...normalizedState,
     activeSkillPolicies,
+    selectedSkillContexts,
   };
 
   const routingEvent: ToolEvent = {
@@ -332,6 +340,7 @@ function withRuntimeDefaults(state: GraphRunState): GraphRunState {
   return {
     ...state,
     activeSkillPolicies: state.activeSkillPolicies ?? [],
+    selectedSkillContexts: state.selectedSkillContexts ?? [],
     plannedToolIntents: state.plannedToolIntents ?? [],
     toolResults: state.toolResults ?? [],
     retrievedContextSnippets: state.retrievedContextSnippets ?? [],

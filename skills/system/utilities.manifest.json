@@ -30,7 +30,10 @@
     ],
     "maxToolCalls": 15
   },
-  "entrypoints": {},
+  "entrypoints": {
+    "plannerPrompt": "utilities/SKILL.md",
+    "executorPrompt": "utilities/Workflows/CreateSkill.md"
+  },
   "dependencies": [],
   "compatibility": {
     "assistantCore": ">=0.1.0 <1.0.0"

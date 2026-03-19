@@ -21,7 +21,10 @@
     "blockedCommands": [],
     "maxToolCalls": 10
   },
-  "entrypoints": {},
+  "entrypoints": {
+    "plannerPrompt": "research/SKILL.md",
+    "executorPrompt": "research/Workflows/StandardResearch.md"
+  },
   "dependencies": [],
   "compatibility": {
     "assistantCore": ">=0.1.0 <1.0.0"

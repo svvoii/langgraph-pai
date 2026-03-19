@@ -25,6 +25,13 @@ export interface ToolExecutorOptions {
   onPostToolUse?: (toolEvent: ToolEvent, result: string) => Promise<void>;
 }
 
+class IntentPreconditionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IntentPreconditionError";
+  }
+}
+
 export function createToolExecutor(options: ToolExecutorOptions): ToolExecutor {
   return {
     executeIntents: async (state: GraphRunState): Promise<ToolExecutionResult[]> => {
@@ -48,6 +55,7 @@ export function createToolExecutor(options: ToolExecutorOptions): ToolExecutor {
         };
 
         try {
+          assertIntentPreconditions(intent);
           assertSkillToolPolicy(toolEvent, policy);
           if (options.onPreToolUse) {
             await options.onPreToolUse(toolEvent);
@@ -73,7 +81,12 @@ export function createToolExecutor(options: ToolExecutorOptions): ToolExecutor {
             intentId: intent.id,
             skillId: intent.skillId,
             toolName: intent.toolName,
-            status: message.toLowerCase().includes("policy violation") ? "blocked" : "error",
+            status:
+              error instanceof IntentPreconditionError
+                ? "precondition_skipped"
+                : message.toLowerCase().includes("policy violation")
+                  ? "blocked"
+                  : "error",
             output: message,
             timestamp: new Date().toISOString(),
           });
@@ -83,6 +96,27 @@ export function createToolExecutor(options: ToolExecutorOptions): ToolExecutor {
       return results;
     },
   };
+}
+
+function assertIntentPreconditions(intent: ToolIntent): void {
+  if (intent.toolName === "web.fetch") {
+    const hasUrl = Boolean(inferUrl(intent.input));
+    if (!hasUrl) {
+      throw new IntentPreconditionError(
+        "Intent precondition skipped: web.fetch requires a URL in input",
+      );
+    }
+    return;
+  }
+
+  if (intent.toolName === "file.read" || intent.toolName === "file.write") {
+    const hasPath = Boolean(intent.targetPath ?? inferDefaultPath(intent.input));
+    if (!hasPath) {
+      throw new IntentPreconditionError(
+        `Intent precondition skipped: ${intent.toolName} requires a file path target`,
+      );
+    }
+  }
 }
 
 function inferDefaultPath(input: string): string | undefined {

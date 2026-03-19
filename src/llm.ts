@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { ChatOpenAI } from "@langchain/openai";
-import type { Criterion, Mode } from "./types.js";
+import type { Criterion, Mode, SelectedSkillContext } from "./types.js";
 
 export interface LlmPhaseInput {
     phase: "think" | "plan";
@@ -9,6 +9,7 @@ export interface LlmPhaseInput {
     iteration: number;
     criteria: Criterion[];
     contextSnippets: string[];
+    selectedSkillContexts: SelectedSkillContext[];
 }
 
 export interface LlmAdapter {
@@ -46,6 +47,8 @@ class OpenAiLlmAdapter implements LlmAdapter {
             input.contextSnippets.length > 0
                 ? input.contextSnippets.map((snippet) => `- ${snippet}`).join("\n")
                 : "- none",
+            "Selected skills:",
+            formatSelectedSkillContexts(input.selectedSkillContexts),
             "Respond with plain text only.",
         ].join("\n");
 
@@ -122,5 +125,23 @@ export function createLlmAdapter(): LlmAdapter {
     }
 
     return new OpenAiLlmAdapter();
+}
+
+function formatSelectedSkillContexts(contexts: SelectedSkillContext[]): string {
+    if (contexts.length === 0) {
+        return "- none";
+    }
+
+    return contexts
+        .map((ctx) => {
+            const snippets = ctx.docSnippets.slice(0, 2).map((snippet) => {
+                const condensed = snippet.replace(/\s+/g, " ").trim();
+                return condensed.slice(0, 240);
+            });
+
+            const snippetText = snippets.length > 0 ? snippets.join(" | ") : "no-doc-snippets";
+            return `- ${ctx.skillId}: ${ctx.skillDescription} [${ctx.source}] :: ${snippetText}`;
+        })
+        .join("\n");
 }
 

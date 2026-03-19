@@ -65,6 +65,20 @@ const GraphState = Annotation.Root({
       };
     }>
   >(),
+  selectedSkillContexts: Annotation<
+    Array<{
+      skillId: string;
+      skillName: string;
+      skillDescription: string;
+      source: "system" | "user";
+      docSnippets: string[];
+      intentHints: {
+        requiresUrl: boolean;
+        requiresFilePath: boolean;
+        preferredToolOrder: string[];
+      };
+    }>
+  >(),
   plannedToolIntents: Annotation<
     Array<{
       id: string;
@@ -80,7 +94,7 @@ const GraphState = Annotation.Root({
       intentId: string;
       skillId: string;
       toolName: string;
-      status: "ok" | "error" | "blocked";
+      status: "ok" | "error" | "blocked" | "precondition_skipped";
       output: string;
       timestamp: string;
     }>

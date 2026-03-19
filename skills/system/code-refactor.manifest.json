@@ -29,9 +29,8 @@
     "maxToolCalls": 20
   },
   "entrypoints": {
-    "plannerPrompt": "prompts/planner.txt",
-    "executorPrompt": "prompts/executor.txt",
-    "workflowModule": "workflow.ts"
+    "plannerPrompt": "code-refactor/SKILL.md",
+    "executorPrompt": "code-refactor/Workflows/Refactor.md"
   },
   "dependencies": [],
   "compatibility": {

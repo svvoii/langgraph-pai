@@ -15,6 +15,10 @@ export function assertSkillToolPolicy(
   }
 
   if (!skill.requiredTools.includes(toolEvent.toolName)) {
+    if (toolEvent.toolName === "reasoning") {
+      return;
+    }
+
     throw new Error(
       `Policy violation: skill '${skill.skillId}' is not allowed to use tool '${toolEvent.toolName}'`,
     );

@@ -17,6 +17,11 @@ export interface RunReport {
     ok: number;
     error: number;
     blocked: number;
+    preconditionSkipped: number;
+  };
+  preconditionSkips: {
+    count: number;
+    byTool: Record<string, number>;
   };
   tokenUsage: {
     estimatedInputTokens: number;
@@ -48,6 +53,17 @@ export function buildRunReport(args: {
   const ok = state.toolResults.filter((result) => result.status === "ok").length;
   const error = state.toolResults.filter((result) => result.status === "error").length;
   const blocked = state.toolResults.filter((result) => result.status === "blocked").length;
+  const preconditionSkipped = state.toolResults.filter(
+    (result) => result.status === "precondition_skipped",
+  ).length;
+
+  const preconditionSkipsByTool: Record<string, number> = {};
+  for (const result of state.toolResults) {
+    if (result.status !== "precondition_skipped") {
+      continue;
+    }
+    preconditionSkipsByTool[result.toolName] = (preconditionSkipsByTool[result.toolName] ?? 0) + 1;
+  }
 
   const estimatedInputTokens = estimateTokens(
     request + state.retrievedContextSnippets.join("\n") + state.criteria.map((c) => c.text).join("\n"),
@@ -61,6 +77,9 @@ export function buildRunReport(args: {
   }
   if (error > 0) {
     failureCauses.push(`tool_errors=${error}`);
+  }
+  if (preconditionSkipped > 0) {
+    failureCauses.push(`precondition_skips=${preconditionSkipped}`);
   }
   if (!state.verificationGates.passed) {
     failureCauses.push(...state.verificationGates.failedReasons);
@@ -86,6 +105,11 @@ export function buildRunReport(args: {
       ok,
       error,
       blocked,
+      preconditionSkipped,
+    },
+    preconditionSkips: {
+      count: preconditionSkipped,
+      byTool: preconditionSkipsByTool,
     },
     tokenUsage: {
       estimatedInputTokens,

@@ -20,6 +20,27 @@ Contains a local-first TypeScript implementation of Personal AI Assistant with L
 
 If a user manifest sets overrideOf to an existing system skill, the user manifest takes precedence.
 
+## Add A New Skill
+
+Use this checklist to add a new skill that participates in routing, policy enforcement, and prompt context.
+
+1. Create a manifest file in `skills/system/<skill-id>.manifest.json`.
+2. Fill required fields: `id`, `name`, `version`, `description`, `useWhen`, `compatibility.assistantCore`.
+3. Keep `requiredTools` inside the known tool set: `file.read`, `file.write`, `shell.run`, `web.fetch`, `reasoning`.
+4. Set strict permissions in `permissions` with minimal access first.
+5. Add optional skill docs under `skills/system/<skill-id>/`.
+6. Prefer manifest `entrypoints` that target the exact docs you want loaded first.
+7. Validate with `npm run dev -- skill:validate`.
+8. Smoke test with a request containing one of the `useWhen` tokens.
+
+### ContentAnalysis Example
+
+- Manifest: `skills/system/content-analysis.manifest.json`
+- Skill docs root: `skills/system/content-analysis/`
+- Runtime behavior: request tokens map to selected skill policy and selected skill doc snippets.
+- Execution behavior: intents missing required URL or file path are marked as precondition skips, not runtime errors.
+- Prompt behavior: think and plan phases receive selected skill context when LLM integration is active.
+
 ---
 
 ## Persistence Tiers
@@ -170,7 +191,14 @@ npm run dev -- runs:recent <N>
 ```bash
 cat .data/reports/<workId>.json
 ```
-Expected report fields: (`durationMs`, `phaseDurationsMs`, `toolCounts`, `tokenUsage`, `failureCauses`)
+Expected report fields: (`durationMs`, `phaseDurationsMs`, `toolCounts`, `preconditionSkips`, `tokenUsage`, `failureCauses`)
+
+- Precondition skip visibility check:
+```bash
+npm run dev -- "research latest AI papers"
+cat .data/reports/<workId>.json
+```
+- Expected: `toolCounts.preconditionSkipped` and `preconditionSkips.byTool` are present when URL/path preconditions are not met.
 
 
 ## 7. Build and run compiled artifact
@@ -210,7 +238,7 @@ npm run start -- "manual built artifact run"
 - Added post-execution quality gates (no failed criteria, no blocked policy events, no unresolved high-risk assumptions) 
 
 ## 5. Observability and Operations
-- Added run telemetry (phase durations, tool count, token usage, failure causes)
+- Added run telemetry (phase durations, tool count, precondition skip signals, token usage, failure causes)
 - Added structured run report file for every execution.
 - Added CLI command to inspect last N runs quickly (summary of request, outcome, failure points)
 

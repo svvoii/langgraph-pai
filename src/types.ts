@@ -52,6 +52,21 @@ export interface SkillRuntimePolicy {
   permissions: SkillPermissions;
 }
 
+export interface SkillIntentHints {
+  requiresUrl: boolean;
+  requiresFilePath: boolean;
+  preferredToolOrder: string[];
+}
+
+export interface SelectedSkillContext {
+  skillId: string;
+  skillName: string;
+  skillDescription: string;
+  source: "system" | "user";
+  docSnippets: string[];
+  intentHints: SkillIntentHints;
+}
+
 export interface ToolIntent {
   id: string;
   skillId: string;
@@ -65,7 +80,7 @@ export interface ToolExecutionResult {
   intentId: string;
   skillId: string;
   toolName: string;
-  status: "ok" | "error" | "blocked";
+  status: "ok" | "error" | "blocked" | "precondition_skipped";
   output: string;
   timestamp: string;
 }
@@ -83,6 +98,7 @@ export interface GraphRunState {
   decisionLog: string[];
   eventLog: string[];
   activeSkillPolicies: SkillRuntimePolicy[];
+  selectedSkillContexts: SelectedSkillContext[];
   plannedToolIntents: ToolIntent[];
   toolResults: ToolExecutionResult[];
   retrievedContextSnippets: string[];

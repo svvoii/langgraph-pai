@@ -69,6 +69,7 @@ export async function thinkNode(
     "think",
     llmAdapter,
     contextSnippets,
+    state.selectedSkillContexts,
     fallbackDecision,
   );
 
@@ -94,6 +95,7 @@ export async function planNode(
     "plan",
     llmAdapter,
     contextSnippets,
+    state.selectedSkillContexts,
     fallbackDecision,
   );
 
@@ -108,16 +110,40 @@ export async function planNode(
 }
 
 export function buildNode(state: GraphRunState): GraphRunState {
-  const intents = state.activeSkillPolicies.flatMap((policy) =>
-    policy.requiredTools.map((toolName, index) => ({
+  const targetPath = extractPathFromRequest(state.request);
+  const targetUrl = extractUrlFromRequest(state.request);
+
+  const hintBySkillId = new Map(
+    state.selectedSkillContexts.map((context) => [context.skillId, context.intentHints]),
+  );
+
+  const intents = state.activeSkillPolicies.flatMap((policy) => {
+    const hints = hintBySkillId.get(policy.skillId);
+    const orderedTools = orderToolsForPolicy(policy.requiredTools, hints?.preferredToolOrder);
+    const filteredTools = orderedTools.filter((toolName) => {
+      if (toolName === "web.fetch" && (!hints?.requiresUrl || !targetUrl)) {
+        return false;
+      }
+      if ((toolName === "file.read" || toolName === "file.write") && (!hints?.requiresFilePath || !targetPath)) {
+        return false;
+      }
+      return true;
+    });
+
+    const toolsToUse =
+      filteredTools.length > 0
+        ? filteredTools
+        : ["reasoning"];
+
+    return toolsToUse.map((toolName, index) => ({
       id: `${policy.skillId}-${state.iteration + 1}-${index + 1}`,
       skillId: policy.skillId,
       toolName,
       input: state.request,
-      targetPath: extractPathFromRequest(state.request),
+      targetPath,
       command: chooseCommandForRequest(toolName, state.request),
-    })),
-  );
+    }));
+  });
 
   return markDecision(
     {
@@ -235,6 +261,7 @@ async function safeLlmDecision(
   phase: "think" | "plan",
   llmAdapter: LlmAdapter | undefined,
   contextSnippets: string[],
+  selectedSkillContexts: GraphRunState["selectedSkillContexts"],
   fallbackDecision: string,
 ): Promise<string> {
   if (!llmAdapter || state.mode === "minimal") {
@@ -249,6 +276,7 @@ async function safeLlmDecision(
       iteration: state.iteration,
       criteria: state.criteria,
       contextSnippets,
+      selectedSkillContexts,
     });
 
     return generated || fallbackDecision;
@@ -280,6 +308,27 @@ async function retrieveContextSnippets(
 function extractPathFromRequest(request: string): string | undefined {
   const match = request.match(/([A-Za-z0-9_./-]+\.[A-Za-z0-9_-]+)/);
   return match ? match[1] : undefined;
+}
+
+function extractUrlFromRequest(request: string): string | undefined {
+  const match = request.match(/https?:\/\/[^\s]+/i);
+  return match ? match[0] : undefined;
+}
+
+function orderToolsForPolicy(tools: string[], preferredOrder: string[] | undefined): string[] {
+  if (!preferredOrder || preferredOrder.length === 0) {
+    return tools;
+  }
+
+  const rank = new Map(preferredOrder.map((tool, index) => [tool, index]));
+  return [...tools].sort((a, b) => {
+    const ra = rank.get(a) ?? 100;
+    const rb = rank.get(b) ?? 100;
+    if (ra !== rb) {
+      return ra - rb;
+    }
+    return a.localeCompare(b);
+  });
 }
 
 function chooseCommandForRequest(toolName: string, request: string): string | undefined {

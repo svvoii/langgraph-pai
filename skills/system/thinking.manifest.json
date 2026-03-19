@@ -21,7 +21,10 @@
     "blockedCommands": [],
     "maxToolCalls": 10
   },
-  "entrypoints": {},
+  "entrypoints": {
+    "plannerPrompt": "thinking/SKILL.md",
+    "executorPrompt": "thinking/Workflows/FirstPrinciples.md"
+  },
   "dependencies": [],
   "compatibility": {
     "assistantCore": ">=0.1.0 <1.0.0"
