@@ -13,60 +13,6 @@ Contains a local-first TypeScript implementation of Personal AI Assistant with L
 
 ---
 
-## Run
-
-- Install dependencies: 
-```bash
-npm install
-npm run check
-```
-
-- Start in dev mode: 
-```bash
-npm run dev -- "test request"
-```
-
-- Build: 
-```bash
-npm run build
-```
-
-- Start built artifact: 
-```bash
-npm run start -- "test request"
-```
-
----
-
-## Skill Commands
-
-- Validate manifests: 
-```bash
-npm run dev -- skill:validate
-```
-
-- Scaffold a system skill: 
-```bash
-npm run dev -- skill:init MySkill "Description" "token1,token2"
-```
-
-- Scaffold a user override skill: 
-```bash
-npm run dev -- skill:init MySkill "Description" "token1,token2" --user
-```
-
-- Resume a saved run: 
-```bash
-npm run dev -- resume <workId>
-```
-
-- Synthesize learning from events: 
-```bash
-npm run dev -- learn:summarize <workId>
-```
-
----
-
 ## Skill Manifest Paths
 
 - System skills: skills/system
@@ -79,14 +25,17 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 ## Persistence Tiers
 
 - Transcript source: `.data/transcripts/<workId>.jsonl`
+- Event log source: `.data/events/<workId>.jsonl`
 - Mutable work and state: `.data/work/<workId>.md` and `.data/state/<workId>.json`
 - Immutable learning archive: `.data/learning/<workId>.md`
+- Structured run report: `.data/reports/<workId>.json`
 
 ---
 
 ## Notes
 
-- This is an MVP skeleton with deterministic behavior and stubs for future LLM/tool integrations.
+- This includes implemented LLM integration, V1 skills loading, policy enforcement, retrieval context, verification gates, and run telemetry.
+- Work ID format is `work-DDMMYYYY-XXXXXXXX` where `XXXXXXXX` is a random 8-character suffix.
 - Optional systems such as voice and statusline are intentionally out of critical path.
 
 ---
@@ -105,9 +54,9 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 
 ## Skill system
 
-- Schema and validation are in `src/skills/schema.ts`.
-- Loading and precedence merge are in `src/skills/loader.ts`.
-- Routing abstraction is in `src/skills/registry.ts`.
+- V1 schema is in `src/skills/manifest.v1.schema.ts`.
+- V1 loading and override precedence are in `src/skills/manifest.v1.loader.ts`.
+- V1 policy validation is in `src/skills/manifest.v1.validator.ts`.
 - Base manifests are in `skills/system`.
 - User overrides are in `skills/user-overrides`.
 
@@ -118,49 +67,8 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 - Persistence adapter is in `src/memory/fsStore.ts`.
 - PRD-like work doc serializer and validator are in `src/memory/workDocument.ts`.
 - Learning synthesis is in `src/memory/synthesizer.ts`.
+- Retrieval memory ranker is in `src/memory/retriever.ts`.
 - Runtime config and path control are in `src/runtime/config.ts`.
-
----
-
-## Simple test course of action
-
-### Step 1: Compile check
-
-- Run: `npm run check`
-
-### Step 2: Validate skills are loading
-
-- Run: `npm run dev -- skill:validate`
-- Expect system manifests listed.
-
-### Step 3: Run one normal workflow
-
-- Run: `npm run dev -- "implement a local orchestrator with verification"`
-- Capture the printed Work ID.
-
-### Step 4: Verify artifacts
-
-- Confirm these files exist for that Work ID:
-- .data/work/<workId>.md
-- .data/state/<workId>.json
-- .data/events/<workId>.jsonl
-- .data/transcripts/<workId>.jsonl
-
-### Step 5: Resume behavior
-
-- Run: `npm run dev -- resume <workId>`
-- Expect iteration to increase while preserving the same work id.
-
-### Step 6: Learning synthesis
-
-- Run: `npm run dev -- learn:summarize <workId>`
-- Expect `.data/learning/<workId>.md` to be generated.
-
-### Step 7: Override precedence test
-
-- Create one user override manifest in `skills/user-overrides` that targets an existing system skill with `overrideOf`.
-- Run `npm run dev -- skill:validate` again.
-- Expect user manifest to win.
 
 ---
 
@@ -168,8 +76,110 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 
 1. Start with `src/main.ts` and `src/runtime/config.ts` for entry and config.
 2. `src/graph/workflow.ts` and `src/graph/phases.ts`
-3. `src/skills/loader.ts`
+3. `src/skills/manifest.v1.loader.ts`, `src/skills/manifest.v1.schema.ts`, and `src/skills/manifest.v1.validator.ts`
 4. `src/memory/fsStore.ts` and `src/memory/workDocument.ts`
+
+
+---
+
+## Test and Validation Commands
+
+## 1. Baseline health
+
+- Install and compile check:
+```bash
+npm install
+npm run check
+```
+
+## 2. Normal run and artifacts
+
+- Start / execute run in dev mode: 
+```bash
+npm run dev -- "manual validation normal run"
+```
+
+- Validate skill manifests: 
+```bash
+npm run dev -- skill:validate
+```
+- Expected: (Lists `code-refactor`, `research`, `thinking`, `utilities`)
+
+- Scaffold a system skill: 
+```bash
+npm run dev -- skill:init MySkill "Description" "token1,token2"
+```
+
+- Scaffold a user override skill: 
+```bash
+npm run dev -- skill:init MySkill "Description" "token1,token2" --user
+```
+
+## 3. Resume and learning synthesis
+
+- Resume saved run: 
+```bash
+npm run dev -- resume <workId>
+```
+- Expected: (same work id is used; iteration increases or remains bounded by max iteration logic)
+
+- Synthesize learning from events: 
+```bash
+npm run dev -- learn:summarize <workId>
+ls -1 .data/learning/<workId>.md
+```
+
+## 4. Safety and policy checks
+
+- Negative safety test:
+```bash
+npm run dev -- "build and run git reset --hard on repo"
+```
+- Expected: Request is blocked with policy violation
+
+- Optional path permission probe:
+```bash
+npm run dev -- "write /etc/passwd"
+```
+- Expected: Blocked by filesystem path policy unless a matching allowed path exists
+
+
+## 5. Retrieval and verification gates
+
+- Run retrieval follow-up to confirm prior runs are used as context:
+```bash
+npm run dev -- "phase-g retrieval memory test followup"
+```
+- Expected: Work doc includes `# Retrieved Context` with prior run snippets
+
+- Inspect latest work doc:
+```bash
+tail -n +1 .data/work/<workId>.md
+```
+- Expected: (Criterion evidence includes check type, summary, details, timestamp; Verification section includes gate statuses and failure reasons)
+
+
+## 6. Observability and operations
+
+- Inspect latest run reports: 
+```bash
+npm run dev -- runs:recent <N>
+```
+
+- Inspect structured report:
+```bash
+cat .data/reports/<workId>.json
+```
+Expected report fields: (`durationMs`, `phaseDurationsMs`, `toolCounts`, `tokenUsage`, `failureCauses`)
+
+
+## 7. Build and run compiled artifact
+
+```bash
+npm run build
+npm run start -- "manual built artifact run"
+```
+- Expected: Built app runs successfully and emits work id plus report summary
 
 
 ---
@@ -214,6 +224,10 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 - Added scenario evaluation suite (simple request, tool-heavy request, resume flow, policy violation attempt, learning synthesis consistency)
 - Store baseline expectated outcomes and run in CI
 
+Current state:
+- Manual validation commands are in place and verified.
+- Automated unit and scenario test harness is the next implementation step.
+
 ---
 
 # 03 Modular Skills Architecture Improvemenmts
@@ -253,3 +267,31 @@ If a user manifest sets overrideOf to an existing system skill, the user manifes
 ---
 
 
+# 05 Next Steps
+
+## 1. Automated test harness (highest priority)
+- Add Vitest.
+- Add unit tests for policy, loader, checker, and phase transitions.
+- Add scenario tests for normal flow, tool-heavy flow, resume flow, and policy violation.
+
+## 2. Tool intent quality improvements
+- Improve intent generation from plan output instead of static skill-required tool expansion.
+- Add richer tool inputs and deterministic tie-breaking for overlapping skill matches.
+
+## 3. Verification depth
+- Add dedicated command/test criterion adapters with stricter evidence schemas.
+- Add per-criterion retries and clearer failure diagnosis.
+
+## 4. Retrieval quality
+- Replace lexical scoring with embedding-based similarity.
+- Add snippet deduplication, token budget controls, and provenance links.
+
+## 5. Security hardening
+- Add outgoing payload secret scanning.
+- Add confirmation-required policies for dangerous but permitted operations.
+
+## 6. Operations and CI
+- Add CI pipeline for check, build, and tests.
+- Add report regression checks for failure causes and latency thresholds.
+
+---
