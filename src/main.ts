@@ -10,6 +10,7 @@ import { createMemoryRetriever } from "./memory/retriever.js";
 import { FsStore } from "./memory/fsStore.js";
 import { synthesizeLearningForWork } from "./memory/synthesizer.js";
 import { loadConfig } from "./runtime/config.js";
+import { createWorkId } from "./runtime/workId.js";
 import { createToolExecutor } from "./runtime/executor.js";
 import { assertSkillToolPolicy } from "./runtime/policies.js";
 import { buildRunReport, formatRecentRunSummaries, summarizeRunReport } from "./runtime/telemetry.js";
@@ -26,21 +27,12 @@ import {
 import type { LoadedSkillV1 } from "./skills/manifest.v1.schema.js";
 import type { GraphRunState, SkillRuntimePolicy, ToolEvent } from "./types.js";
 
-// returns date as DDMMYYYY
-function getHumanDate(): string {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = String(now.getFullYear());
-  return `${day}${month}${year}`;
-}
-
 function createInitialState(request: string): GraphRunState {
   const mode = routeMode(request);
   return {
     request,
     mode,
-    workId: `work-${getHumanDate()}-${randomUUID().slice(0, 8)}`,
+    workId: createWorkId(),
     currentPhase: null,
     criteria: [],
     maxIterations: 6,
